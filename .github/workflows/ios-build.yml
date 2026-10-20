@@ -1,0 +1,49 @@
+name: iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select newest Xcode 26
+        run: |
+          ls -d /Applications/Xcode*.app
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          [ -n "$X" ] || X=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$X"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: mobile/ios/OpenU60
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        working-directory: mobile/ios/OpenU60
+        run: |
+          xcodebuild -project OpenU60.xcodeproj -scheme OpenU60 \
+            -configuration Release -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package IPA
+        working-directory: mobile/ios/OpenU60
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/OpenU60.app Payload/
+          zip -qry OpenU60-unsigned.ipa Payload
+          ls -lh OpenU60-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenU60-unsigned-ipa
+          path: mobile/ios/OpenU60/OpenU60-unsigned.ipa
+          retention-days: 30
